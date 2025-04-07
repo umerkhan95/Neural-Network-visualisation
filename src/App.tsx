@@ -42,6 +42,14 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Draw the decision boundary
+  useEffect(() => {
+    if (isTraining && currentEpoch > 0 && currentEpoch % 5 === 0) {
+      // Force a state update to trigger visualization refresh
+      setStatusMessage(prev => `${prev.split(' - ')[0]} - Updating visualization...`);
+    }
+  }, [currentEpoch, isTraining]);
+
   const handleParametersChange = (newParameters: NeuralNetworkParameters) => {
     setParameters(newParameters);
     // We don't recreate the model immediately, only when training starts
@@ -63,42 +71,74 @@ const App: React.FC = () => {
   };
 
   const handleStartTraining = async () => {
-    if (!modelRef.current) return;
+    if (isTraining) {
+      setIsTraining(false);
+      return;
+    }
+    
+    if (!modelRef.current) {
+      console.error('Model not created yet');
+      return;
+    }
     
     try {
-      setIsTraining(true);
-      setStatusMessage('Preparing dataset...');
-      setShowAlert(true);
+      // Make sure model is created with current parameters
+      if (!modelRef.current.model) {
+        console.log('Creating new model instance before training');
+        modelRef.current.createModel(parameters);
+      }
       
-      // Reset training metrics
+      setIsTraining(true);
+      setCurrentEpoch(0);
       setLossHistory([]);
       setAccuracyHistory([]);
-      setCurrentEpoch(0);
       
       // Get dataset
       const dataset = await getDatasetByName(selectedDataset);
       
-      // Create model based on current parameters
-      modelRef.current.createModel(parameters);
+      // Reset best loss tracking
+      setStatusMessage('Preparing dataset...');
       
-      setStatusMessage('Training started...');
-      
-      // Set up callbacks for visualization updates
-      const callbacks = {
-        onEpochEnd: (epoch: number, logs: { loss: number, accuracy: number }) => {
-          setCurrentEpoch(epoch + 1);
+      // Train the model based on selected dataset
+      const onEpochEnd = (epoch: number, logs: any) => {
+        setCurrentEpoch(epoch + 1);
+        
+        // Check for valid loss and accuracy values and add them to history
+        if (typeof logs.loss === 'number' && !isNaN(logs.loss)) {
           setLossHistory(prev => [...prev, logs.loss]);
+        }
+        
+        if (typeof logs.accuracy === 'number' && !isNaN(logs.accuracy)) {
           setAccuracyHistory(prev => [...prev, logs.accuracy]);
-          setStatusMessage(`Training: Epoch ${epoch + 1}/${parameters.epochs} - Loss: ${logs.loss.toFixed(4)} - Accuracy: ${logs.accuracy.toFixed(4)}`);
-        },
-        onTrainingComplete: () => {
-          setIsTraining(false);
-          setStatusMessage('Training completed!');
-          // Keep alert visible for training completion
+        }
+        
+        // Format the status message with valid values
+        const lossValue = typeof logs.loss === 'number' && !isNaN(logs.loss) 
+          ? logs.loss.toFixed(4) 
+          : 'N/A';
+          
+        const accuracyValue = typeof logs.accuracy === 'number' && !isNaN(logs.accuracy) 
+          ? logs.accuracy.toFixed(4) 
+          : 'N/A';
+          
+        setStatusMessage(`Training: Epoch ${epoch + 1}/${parameters.epochs} - Loss: ${lossValue} - Accuracy: ${accuracyValue}`);
+        
+        // Force visualizer to update periodically during training
+        if ((epoch + 1) % 5 === 0) {
+          setStatusMessage(prev => `${prev} - Updating visualization...`);
         }
       };
       
-      // Start training based on selected dataset
+      // Set up callbacks for visualization updates
+      const callbacks = {
+        onEpochEnd,
+        onTrainingComplete: () => {
+          setIsTraining(false);
+          setStatusMessage('Training completed!');
+        }
+      };
+      
+      // Use the appropriate training method based on dataset
       switch (selectedDataset) {
         case 'xor':
           await modelRef.current.trainOnXOR(parameters, callbacks);
@@ -109,17 +149,23 @@ const App: React.FC = () => {
         case 'regression':
           await modelRef.current.trainOnRegressionData(parameters, callbacks);
           break;
-        case 'mnist':
-          // MNIST training would be implemented here
-          setStatusMessage('MNIST training not fully implemented in this demo');
-          setIsTraining(false);
-          break;
         default:
           await modelRef.current.trainOnXOR(parameters, callbacks);
       }
+      
+      // Training finished
+      setIsTraining(false);
+      setStatusMessage('Training completed!');
     } catch (error) {
       console.error('Training error:', error);
-      setStatusMessage(`Error during training: ${error}`);
+      // Log more detailed error information
+      if (error instanceof Error) {
+        console.error('Training error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+      }
       setIsTraining(false);
     }
   };
@@ -186,7 +232,7 @@ const App: React.FC = () => {
           {/* Decision boundary visualization for classification problems */}
           <DecisionBoundaryVisualizer 
             dataset={selectedDataset}
-            model={modelRef.current?.model}
+            model={modelRef.current}
             isTraining={isTraining}
             currentEpoch={currentEpoch}
           />
