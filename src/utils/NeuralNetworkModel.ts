@@ -139,10 +139,12 @@ export class NeuralNetworkModel {
         const trainingOutputs = xorData.outputs.clone();
         
         try {
-          await this.model!.fit(trainingInputs, trainingOutputs, {
-            batchSize,
-            epochs: remainingEpochs,
-            callbacks: customCallbacks
+          await tf.tidy(async () => {
+            await this.model!.fit(trainingInputs, trainingOutputs, {
+              batchSize,
+              epochs: remainingEpochs,
+              callbacks: customCallbacks
+            });
           });
         } catch (fitError) {
           console.error('Error during model.fit:', fitError);
@@ -239,10 +241,12 @@ export class NeuralNetworkModel {
           },
         };
         
-        await this.model!.fit(data.inputs, data.outputs, {
-          batchSize,
-          epochs: remainingEpochs,
-          callbacks: customCallbacks
+        await tf.tidy(async () => {
+          await this.model!.fit(data.inputs, data.outputs, {
+            batchSize,
+            epochs: remainingEpochs,
+            callbacks: customCallbacks
+          });
         });
         
         // Allow event loop to process and clean up memory
@@ -359,10 +363,12 @@ export class NeuralNetworkModel {
           },
         };
         
-        await this.model!.fit(data.inputs, data.outputs, {
-          batchSize,
-          epochs: remainingEpochs,
-          callbacks: customCallbacks
+        await tf.tidy(async () => {
+          await this.model!.fit(data.inputs, data.outputs, {
+            batchSize,
+            epochs: remainingEpochs,
+            callbacks: customCallbacks
+          });
         });
         
         // Allow event loop to process and clean up memory
